@@ -1,8 +1,15 @@
 import logging
+import os
 
-from bs4 import BeautifulSoup
+import boto3
 import pymupdf
 import requests
+from bs4 import BeautifulSoup
+from botocore.exceptions import ClientError
+
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -127,6 +134,62 @@ def recorder(elpos):
   pass
 
 
+def compose_email(filename: str) -> MIMEMultipart:
+	sender = os.environ["SENDER_EMAIL"]
+	recipient = os.environ["RECIPIENT_EMAIL"]
+
+	BODY_TEXT = "Hello,\r\nThis is an automated email.\r\nPlease see the attached file for this week's lectionary.\n\nCheers,\nAWS SES Bot"
+	BODY_HTML = """
+	<html>
+	<head></head>
+	<body>
+	<p>Hello,</p>
+	<p>This is an automated email.<br>Please see the attached file for this week's lectionary.</p>
+	<p>Cheers,<br>AWS SES Bot</p>
+	</body>
+	</html>
+	"""
+	CHARSET = "UTF-8"
+
+	msg = MIMEMultipart('mixed')
+	msg['Subject'] = f"Lectionary - {filename}"
+	msg['From'] = sender
+	msg['To'] = recipient
+
+	msg_body = MIMEMultipart('alternative')
+	textpart = MIMEText(BODY_TEXT.encode(CHARSET), 'plain', CHARSET)
+	htmlpart = MIMEText(BODY_HTML.encode(CHARSET), 'html', CHARSET)
+
+	msg_body.attach(textpart)
+	msg_body.attach(htmlpart)
+	
+	att = MIMEApplication(open(f"{filename}", 'rb').read())
+	att.add_header('Content-Disposition','attachment',filename=filename)
+
+	msg.attach(msg_body)
+	msg.attach(att)
+	return msg
+
+
+def send_ses_raw_email(source: str, destinations: list, raw_message) -> str:
+	ses_client = boto3.client("ses")
+	try:
+		response = ses_client.send_raw_email(
+			Source=source,
+			Destinations=destinations,
+			RawMessage={
+				"Data": raw_message.as_string(),
+			},
+		)
+    # Display an error if something goes wrong.	
+	except ClientError as e:
+		logger.exception(e.response['Error']['Message'])
+		raise
+	else:
+		logger.info(f"Email sent! Message ID: {response['MessageId']}"),
+		return response['MessageId']
+
+
 def lambda_handler(event, context):
 	# This lambda function is going to create a pdf file with the weekly Lectionary content.
 	# Step 1: get scripture reference from https://disciples.org/resources/lectionary/
@@ -142,9 +205,10 @@ def lambda_handler(event, context):
 		'content': scriptures,
 	})
 	filename = write_pdf_doc(story)
-
+	msg = compose_email(filename)
+	message_id = send_ses_raw_email(msg['From'], [msg['To']], msg)
 	return {
-		'result': 200
+		'message_id': message_id
 	}
 
 

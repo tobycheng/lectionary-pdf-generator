@@ -12,6 +12,7 @@ constructs = "^10.3.0"
 requests = "^2.32.3"
 bs4 = "^0.0.2"
 pymupdf = "^1.24.5"
+boto3 = "^1.34.130"
 
 
 [build-system]
