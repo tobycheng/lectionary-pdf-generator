@@ -1,7 +1,9 @@
 from aws_cdk import (
     aws_iam as iam,
+    aws_events as events,
     aws_lambda as _lambda,
     aws_ssm as ssm,
+    aws_events_targets as targets,
     Duration,
     Stack,
 )
@@ -35,3 +37,17 @@ class LectionaryPdfGeneratorStack(Stack):
                 effect=iam.Effect.ALLOW,
             )
         )
+
+        # Run every Monday at 12pm UTC
+        rule = events.Rule(
+            self, 
+            "pdf-generator-eventrule",
+            schedule = events.Schedule.cron(
+                hour="12",
+                minute="0",
+                month="*",
+                week_day="MON",
+                year="*"
+            )
+        )
+        rule.add_target(targets.LambdaFunction(generator_function))
