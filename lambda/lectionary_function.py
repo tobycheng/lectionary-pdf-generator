@@ -115,7 +115,7 @@ def write_pdf_doc(story: pymupdf.Story) -> str:
 	WHERE = MEDIABOX + (36, 36, -36, -36)  # leave borders of 0.5 inches
 
 	filename = "sample_output.pdf"
-	writer = pymupdf.DocumentWriter(filename)
+	writer = pymupdf.DocumentWriter(f"/tmp/{filename}")
 	pno = 0 # current page number
 	more = 1  # will be set to 0 when done
 	while more:  # loop until all story content is processed
@@ -163,7 +163,7 @@ def compose_email(filename: str) -> MIMEMultipart:
 	msg_body.attach(textpart)
 	msg_body.attach(htmlpart)
 	
-	att = MIMEApplication(open(f"{filename}", 'rb').read())
+	att = MIMEApplication(open(f"/tmp/{filename}", 'rb').read())
 	att.add_header('Content-Disposition','attachment',filename=filename)
 
 	msg.attach(msg_body)
