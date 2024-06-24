@@ -12,6 +12,8 @@ uses the scripture references to search from the [BibleGateway.com](https://www.
  - Simple Email Service (SES)
  - EventBridge Cron Schedule
 
+ ![Architecture png](/images/architecture.png)
+
 ## Dependencies
 
 - AWS account
@@ -40,4 +42,6 @@ poetry run cdk deploy
 
 ## Email Screenshot
 
-![Email screenshot](sample_email_screenshot.png)
+![Email screenshot](/images/sample_email_screenshot.png)
+
+[sample_output.pdf](sample_output.pdf)
