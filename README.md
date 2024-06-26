@@ -23,13 +23,22 @@ uses the scripture references to search from the [BibleGateway.com](https://www.
 
 ## Deploy
 
-with virtual environment activated
+with poetry 
+```
+poetry run cdk deploy
+```
+OR with virtual environment activated
 ```
 cdk deploy
 ```
-OR with poetry 
+
+## Test
 ```
-poetry run cdk deploy
+poetry run python -m pytest tests/
+```
+OR with virtual environment activated
+```
+pytest tests/
 ```
 
 ## Other CDK Useful commands
