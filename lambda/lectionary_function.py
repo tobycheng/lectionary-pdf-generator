@@ -14,7 +14,7 @@ from email.mime.application import MIMEApplication
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-def get_webpage(url: str) -> str:
+def request_webpage(url: str) -> str:
 	try:
 		resp = requests.get(url)
 	except requests.exceptions.RequestException as e:
@@ -24,8 +24,11 @@ def get_webpage(url: str) -> str:
 		logger.info(resp.status_code)
 		return resp.text
 	
-def extract_disciples_org(html: str) -> dict:
-	disciples_bs4 = BeautifulSoup(html, 'html.parser')
+def parse_html_to_beautifulsoup(html: str) -> BeautifulSoup:
+	return BeautifulSoup(html, 'html.parser')
+	
+def extract_lectionary_resources(html: str) -> dict:
+	disciples_bs4 = parse_html_to_beautifulsoup(html)
 	lectionary_item = disciples_bs4.find(
 			'div', 
 			class_='disciples-lectionary-container'
@@ -42,18 +45,17 @@ def extract_disciples_org(html: str) -> dict:
 	}
 
 
-def get_scripture_reference() -> str:
+def get_lectionary_page() -> str:
 	url = "https://disciples.org/resources/lectionary/"
-	html = get_webpage(url)
-	data = extract_disciples_org(html)
-	return data
+	html = request_webpage(url)
+	return html
 
 def search_scripture(references: list[str], version: str = 'NIV') -> dict:
-	result = []
+	scriptures = []
 	for ref in references:
 		url = f"https://www.biblegateway.com/passage/?search={ref}&version={version}"
-		page = get_webpage(url)
-		scripture_bs4 = BeautifulSoup(page, 'html.parser')
+		html = request_webpage(url)
+		scripture_bs4 = parse_html_to_beautifulsoup(html)
 		passage_content = scripture_bs4.find_all(class_="passage-content")
 
 		paragraphs = []
@@ -61,11 +63,11 @@ def search_scripture(references: list[str], version: str = 'NIV') -> dict:
 			for p in content.find_all('p'):
 				paragraphs.append(p.get_text())
 
-		result.append({
+		scriptures.append({
 			"scripture_reference": ref,
 			"paragraphs": paragraphs,
 		})
-	return result
+	return scriptures
 
 def generate_pdf_story(data: dict) -> pymupdf.Story:
 	my_template = ("""
@@ -118,14 +120,14 @@ def write_pdf_doc(story: pymupdf.Story) -> str:
 	writer = pymupdf.DocumentWriter(f"/tmp/{filename}")
 	pno = 0 # current page number
 	more = 1  # will be set to 0 when done
-	while more:  # loop until all story content is processed
-		dev = writer.begin_page(MEDIABOX)  # make a device to write on the page
-		more, filled = story.place(WHERE)  # compute content positions on page
-		story.element_positions(recorder, {"page": pno})  # provide page number in addition
+	while more:
+		dev = writer.begin_page(MEDIABOX)
+		more, filled = story.place(WHERE)
+		story.element_positions(recorder, {"page": pno})
 		story.draw(dev)
 		writer.end_page()
-		pno += 1  # increase page number
-	writer.close()  # close output file
+		pno += 1
+	writer.close()
 	logger.info(f"File saved: {filename}")
 	return filename
 
@@ -171,12 +173,12 @@ def compose_email(filename: str) -> MIMEMultipart:
 	return msg
 
 
-def send_ses_raw_email(source: str, destinations: list, raw_message) -> str:
+def send_ses_raw_email(raw_message: MIMEMultipart) -> str:
 	ses_client = boto3.client("ses")
 	try:
 		response = ses_client.send_raw_email(
-			Source=source,
-			Destinations=destinations,
+			Source=raw_message['From'],
+			Destinations=raw_message['To'],
 			RawMessage={
 				"Data": raw_message.as_string(),
 			},
@@ -197,16 +199,19 @@ def lambda_handler(event, context):
 	# Step 3: write the data to a pdf document
 	# Step 4: send ses email with attached pdf file
 
-	data = get_scripture_reference()
-	scriptures = search_scripture(data['scripture_references'])
+	html = get_lectionary_page()
+	lectionary = extract_lectionary_resources(html)
+
+	scriptures = search_scripture(lectionary['scripture_references'])
 
 	story = generate_pdf_story({
-		'title': data['lectionary_date'],
+		'title': lectionary['lectionary_date'],
 		'content': scriptures,
 	})
 	filename = write_pdf_doc(story)
+
 	msg = compose_email(filename)
-	message_id = send_ses_raw_email(msg['From'], [msg['To']], msg)
+	message_id = send_ses_raw_email(msg)
 	return {
 		'message_id': message_id
 	}
